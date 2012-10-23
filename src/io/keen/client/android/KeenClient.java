@@ -625,18 +625,3 @@ public class KeenClient {
 
 }
 
-/**
- * An interface to simulate functional programming so that you can tell the {@link KeenClient} how to
- * dynamically return Keen Global Properties based on event collection name.
- */
-interface GlobalPropertiesEvaluator {
-    Map<String, Object> getGlobalProperties(String eventCollection);
-}
-
-/**
- * An interface to simulate functional programming so that the {@link KeenClient} can notify you when an
- * asynchronous upload has finished.
- */
-interface UploadFinishedCallback {
-    void callback();
-}
