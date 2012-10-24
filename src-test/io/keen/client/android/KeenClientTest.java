@@ -155,6 +155,15 @@ public class KeenClientTest {
         client.addEvent(event, "foo");
         File[] files = client.getFilesInDir(client.getEventDirectoryForEventCollection("foo"));
         assertEquals(2, files.length);
+
+        // an event with a nested property called "keen" should work
+        event = TestUtils.getSimpleEvent();
+        Map<String, Object> nested = new HashMap<String, Object>();
+        nested.put("keen", "value");
+        event.put("nested", nested);
+        client.addEvent(event, "foo");
+        files = client.getFilesInDir(client.getEventDirectoryForEventCollection("foo"));
+        assertEquals(3, files.length);
     }
 
     @Test

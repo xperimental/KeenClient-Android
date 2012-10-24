@@ -226,13 +226,19 @@ public class KeenClient {
         }
     }
 
-    @SuppressWarnings("unchecked") // cast to generic Map will always be okay in this case
     private void validateEvent(Map<String, Object> event) throws InvalidEventException {
-        if (event == null || event.size() == 0) {
-            throw new InvalidEventException("You must specify a non-null, non-empty event.");
-        }
-        if (event.containsKey("keen")) {
-            throw new InvalidEventException("An event cannot contain a root-level property named 'keen'.");
+        validateEvent(event, 0);
+    }
+
+    @SuppressWarnings("unchecked") // cast to generic Map will always be okay in this case
+    private void validateEvent(Map<String, Object> event, int depth) throws InvalidEventException {
+        if (depth == 0) {
+            if (event == null || event.size() == 0) {
+                throw new InvalidEventException("You must specify a non-null, non-empty event.");
+            }
+            if (event.containsKey("keen")) {
+                throw new InvalidEventException("An event cannot contain a root-level property named 'keen'.");
+            }
         }
 
         for (Map.Entry<String, Object> entry : event.entrySet()) {
@@ -253,7 +259,7 @@ public class KeenClient {
                     throw new InvalidEventException("An event cannot contain a string property value longer than 10,000 characters.");
                 }
             } else if (value instanceof Map) {
-                validateEvent((Map<String, Object>) value);
+                validateEvent((Map<String, Object>) value, depth + 1);
             }
         }
     }
