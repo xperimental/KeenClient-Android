@@ -57,7 +57,6 @@ public class KeenClient {
      * @param apiKey    The API Key for your project.
      */
     public static void initialize(Context context, String projectId, String apiKey) {
-        System.out.println("suck a dick");
         ClientSingleton.INSTANCE.client = new KeenClient(context, projectId, apiKey);
     }
 
