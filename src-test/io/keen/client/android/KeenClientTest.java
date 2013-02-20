@@ -39,28 +39,25 @@ public class KeenClientTest {
     public void testKeenClientConstructor() {
         Context context = getMockedContext();
 
-        runKeenClientConstructorTest(null, null, null, true, "null context",
+        runKeenClientConstructorTest(null, null, true, "null context",
                 "Android Context cannot be null.");
-        runKeenClientConstructorTest(context, null, null, true, "null project id",
-                "Invalid project ID specified: null");
-        runKeenClientConstructorTest(context, "abc", null, true, "null api key",
-                "Invalid API Key specified: null");
-        runKeenClientConstructorTest(context, "", "def", true, "empty project id",
-                "Invalid project ID specified: ");
-        runKeenClientConstructorTest(context, "abc", "", true, "empty api key",
-                "Invalid API Key specified: ");
-        runKeenClientConstructorTest(context, "abc", "def", false, "everything is good",
+        runKeenClientConstructorTest(context, null, true, "null project token",
+                "Invalid project token specified: null");
+        runKeenClientConstructorTest(context, "", true, "empty project token",
+                "Invalid project token specified: ");
+        runKeenClientConstructorTest(context, "abc", false, "everything is good",
                 null);
     }
 
-    private void runKeenClientConstructorTest(Context context, String projectId, String apiKey,
-                                              boolean shouldFail, String msg, String expectedMessage) {
+    private void runKeenClientConstructorTest(Context context, String projectToken,
+                                              boolean shouldFail, String msg,
+                                              String expectedMessage) {
         try {
-            KeenClient client = new KeenClient(context, projectId, apiKey);
+            KeenClient client = new KeenClient(context, projectToken);
             if (shouldFail) {
                 fail(msg);
             } else {
-                doClientAssertions(context, projectId, apiKey, client);
+                doClientAssertions(context, projectToken, client);
             }
         } catch (IllegalArgumentException e) {
             assertEquals(expectedMessage, e.getLocalizedMessage());
@@ -78,15 +75,15 @@ public class KeenClientTest {
 
         // make sure bad values error correctly
         try {
-            KeenClient.initialize(null, null, null);
+            KeenClient.initialize(null, null);
             fail("can't use bad values");
         } catch (IllegalArgumentException e) {
         }
 
         Context context = getMockedContext();
-        KeenClient.initialize(context, "abc", "def");
+        KeenClient.initialize(context, "abc");
         KeenClient client = KeenClient.client();
-        doClientAssertions(context, "abc", "def", client);
+        doClientAssertions(context, "abc", client);
     }
 
     @Test
@@ -138,7 +135,7 @@ public class KeenClientTest {
         event.remove("long");
         event.put("valid key", "valid value");
         KeenClient client = getClient();
-        client.addEvent(event, "foo");
+        client.addEvent("foo", event);
         // make sure the event's there
         Map<String, Object> storedEvent = getFirstEventForCollection(client, "foo");
         assertNotNull(storedEvent);
@@ -152,7 +149,7 @@ public class KeenClientTest {
         // an event with a Calendar should work
         Calendar now = Calendar.getInstance();
         event.put("datetime", now);
-        client.addEvent(event, "foo");
+        client.addEvent("foo", event);
         File[] files = client.getFilesInDir(client.getEventDirectoryForEventCollection("foo"));
         assertEquals(2, files.length);
 
@@ -161,7 +158,7 @@ public class KeenClientTest {
         Map<String, Object> nested = new HashMap<String, Object>();
         nested.put("keen", "value");
         event.put("nested", nested);
-        client.addEvent(event, "foo");
+        client.addEvent("foo", event);
         files = client.getFilesInDir(client.getEventDirectoryForEventCollection("foo"));
         assertEquals(3, files.length);
     }
@@ -172,7 +169,7 @@ public class KeenClientTest {
         KeenClient client = getClient();
         Map<String, Object> event = new HashMap<String, Object>();
         event.put("test key", "test value");
-        client.addEvent(event, "foo");
+        client.addEvent("foo", event);
         client.upload(null);
         // make sure file was deleted
         assertNull(getFirstEventForCollection(client, "foo"));
@@ -225,8 +222,8 @@ public class KeenClientTest {
         Map<String, Object> event = TestUtils.getSimpleEvent();
 
         KeenClient client = getMockedClient(result, 200);
-        client.addEvent(event, eventCollection);
-        client.addEvent(event, eventCollection);
+        client.addEvent(eventCollection, event);
+        client.addEvent(eventCollection, event);
 
         client.upload(null);
 
@@ -247,8 +244,8 @@ public class KeenClientTest {
         Map<String, Object> event = TestUtils.getSimpleEvent();
 
         KeenClient client = getMockedClient(result, 200);
-        client.addEvent(event, "foo");
-        client.addEvent(event, "bar");
+        client.addEvent("foo", event);
+        client.addEvent("bar", event);
 
         client.upload(null);
 
@@ -269,8 +266,8 @@ public class KeenClientTest {
         Map<String, Object> event = TestUtils.getSimpleEvent();
 
         KeenClient client = getMockedClient(result, 200);
-        client.addEvent(event, "foo");
-        client.addEvent(event, "foo");
+        client.addEvent("foo", event);
+        client.addEvent("foo", event);
 
         client.upload(null);
 
@@ -292,8 +289,8 @@ public class KeenClientTest {
         Map<String, Object> event = TestUtils.getSimpleEvent();
 
         KeenClient client = getMockedClient(result, 200);
-        client.addEvent(event, "foo");
-        client.addEvent(event, "bar");
+        client.addEvent("foo", event);
+        client.addEvent("bar", event);
 
         client.upload(null);
 
@@ -316,8 +313,8 @@ public class KeenClientTest {
         Map<String, Object> event = TestUtils.getSimpleEvent();
 
         KeenClient client = getMockedClient(result, 200);
-        client.addEvent(event, "foo");
-        client.addEvent(event, "bar");
+        client.addEvent("foo", event);
+        client.addEvent("bar", event);
 
         client.upload(null);
 
@@ -331,14 +328,14 @@ public class KeenClientTest {
         Map<String, Object> event = TestUtils.getSimpleEvent();
         // create 5 events
         for (int i = 0; i < 5; i++) {
-            client.addEvent(event, "foo");
+            client.addEvent("foo", event);
         }
 
         // should be 5 events now
         File[] files = client.getFilesForEventCollection("foo");
         assertEquals(5, files.length);
         // now do 1 more, should age out 2 old ones
-        client.addEvent(event, "foo");
+        client.addEvent("foo", event);
         // so now there should be 4 left (5 - 2 + 1)
         assertEquals(4, client.getFilesForEventCollection("foo").length);
     }
@@ -370,7 +367,7 @@ public class KeenClientTest {
         client.setGlobalProperties(globalProperties);
         Map<String, Object> event = TestUtils.getSimpleEvent();
         String eventCollection = String.format("foo%d", Calendar.getInstance().getTimeInMillis());
-        client.addEvent(event, eventCollection);
+        client.addEvent(eventCollection, event);
         assertEquals(expectedNumProperties + 1, getFirstEventForCollection(client, eventCollection).size());
         return eventCollection;
     }
@@ -420,7 +417,7 @@ public class KeenClientTest {
         client.setGlobalPropertiesEvaluator(evaluator);
         Map<String, Object> event = TestUtils.getSimpleEvent();
         String eventCollection = String.format("foo%d", Calendar.getInstance().getTimeInMillis());
-        client.addEvent(event, eventCollection);
+        client.addEvent(eventCollection, event);
         assertEquals(expectedNumProperties + 1, getFirstEventForCollection(client, eventCollection).size());
         return eventCollection;
     }
@@ -450,7 +447,7 @@ public class KeenClientTest {
 
         Map<String, Object> event = new HashMap<String, Object>();
         event.put("foo", "bar");
-        client.addEvent(event, "apples");
+        client.addEvent("apples", event);
 
         Map<String, Object> storedEvent = getFirstEventForCollection(client, "apples");
         assertEquals("bar", storedEvent.get("foo"));
@@ -461,7 +458,7 @@ public class KeenClientTest {
     private void addSimpleEventAndUpload(KeenClient mockedClient) throws KeenException {
         Map<String, Object> event = new HashMap<String, Object>();
         event.put("a", "apple");
-        mockedClient.addEvent(event, "foo");
+        mockedClient.addEvent("foo", event);
         mockedClient.upload(null);
     }
 
@@ -521,26 +518,25 @@ public class KeenClientTest {
                                      String expectedMessage) {
         KeenClient client = getClient();
         try {
-            client.addEvent(event, eventCollection);
+            client.addEvent(eventCollection, event);
             fail(msg);
         } catch (KeenException e) {
             assertEquals(expectedMessage, e.getLocalizedMessage());
         }
     }
 
-    private void doClientAssertions(Context expectedContext, String expectedProjectId,
-                                    String expectedApiKey, KeenClient client) {
+    private void doClientAssertions(Context expectedContext, String expectedProjectToken,
+                                    KeenClient client) {
         assertEquals(expectedContext, client.getContext());
-        assertEquals(expectedProjectId, client.getProjectId());
-        assertEquals(expectedApiKey, client.getApiKey());
+        assertEquals(expectedProjectToken, client.getProjectToken());
     }
 
     private KeenClient getClient() {
-        return getClient("508339b0897a2c4282000000", "80ce00d60d6443118017340c42d1cfaf");
+        return getClient("508339b0897a2c4282000000");
     }
 
-    private KeenClient getClient(String projectId, String apiKey) {
-        KeenClient client = new KeenClient(getMockedContext(), projectId, apiKey);
+    private KeenClient getClient(String projectToken) {
+        KeenClient client = new KeenClient(getMockedContext(), projectToken);
         client.setIsRunningTests(true);
         return client;
     }

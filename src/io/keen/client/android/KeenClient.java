@@ -21,7 +21,7 @@ import java.util.*;
  * Example usage:
  * <p/>
  * <pre>
- *     KeenClient.initialize(getApplicationContext(), "my_project_id", "my_api_key");
+ *     KeenClient.initialize(getApplicationContext(), "my_project_token");
  *     Map<String, Object> myEvent = new HashMap<String, Object>();
  *     myEvent.put("property name", "property value");
  *     KeenClient.client().addEvent(myEvent, "purchases");
@@ -46,18 +46,16 @@ public class KeenClient {
     }
 
     /**
-     * Call this to initialize the singleton instance of KeenClient and set its project ID and API key to the
-     * given parameters.
+     * Call this to initialize the singleton instance of KeenClient and set its project token.
      * <p/>
      * You'll generally want to call this at the very beginning of your application's lifecycle. Once you've called
      * this, you can then call KeenClient.client() afterwards.
      *
-     * @param context   The Android context of your application.
-     * @param projectId The ID of your project.
-     * @param apiKey    The API Key for your project.
+     * @param context      The Android context of your application.
+     * @param projectToken The Keen IO Project Token.
      */
-    public static void initialize(Context context, String projectId, String apiKey) {
-        ClientSingleton.INSTANCE.client = new KeenClient(context, projectId, apiKey);
+    public static void initialize(Context context, String projectToken) {
+        ClientSingleton.INSTANCE.client = new KeenClient(context, projectToken);
     }
 
     /**
@@ -77,34 +75,28 @@ public class KeenClient {
     /////////////////////////////////////////////
 
     private final Context context;
-    private final String projectId;
-    private final String apiKey;
+    private final String projectToken;
     private GlobalPropertiesEvaluator globalPropertiesEvaluator;
     private Map<String, Object> globalProperties;
     private boolean isRunningTests;
 
     /**
-     * Call this if your code needs to use more than one Keen project and API Key (or if you don't want to use
+     * Call this if your code needs to use more than one Keen project (or if you don't want to use
      * the managed, singleton instance provided by this library).
      *
-     * @param context   The Android context of your application.
-     * @param projectId The ID of your project.
-     * @param apiKey    The API Key for your project.
+     * @param context      The Android context of your application.
+     * @param projectToken The Keen IO project token.
      */
-    public KeenClient(Context context, String projectId, String apiKey) {
+    public KeenClient(Context context, String projectToken) {
         if (context == null) {
             throw new IllegalArgumentException("Android Context cannot be null.");
         }
-        if (projectId == null || projectId.length() == 0) {
-            throw new IllegalArgumentException("Invalid project ID specified: " + projectId);
-        }
-        if (apiKey == null || apiKey.length() == 0) {
-            throw new IllegalArgumentException("Invalid API Key specified: " + apiKey);
+        if (projectToken == null || projectToken.length() == 0) {
+            throw new IllegalArgumentException("Invalid project token specified: " + projectToken);
         }
 
         this.context = context;
-        this.projectId = projectId;
-        this.apiKey = apiKey;
+        this.projectToken = projectToken;
         this.globalPropertiesEvaluator = null;
         this.globalProperties = null;
         this.isRunningTests = false;
@@ -118,13 +110,13 @@ public class KeenClient {
      * The event will be stored on the local file system until you decide to upload (usually this will happen
      * right before your app goes into the background, but it could be any time).
      *
+     * @param eventCollection The name of the event collection you want to put this event into.
      * @param event           A Map that consists of key/value pairs. Keen naming conventions apply (see docs).
      *                        Nested Maps and lists are acceptable (and encouraged!).
-     * @param eventCollection The name of the event collection you want to put this event into.
      * @throws KeenException
      */
-    public void addEvent(Map<String, Object> event, String eventCollection) throws KeenException {
-        addEvent(event, null, eventCollection);
+    public void addEvent(String eventCollection, Map<String, Object> event) throws KeenException {
+        addEvent(eventCollection, event, null);
     }
 
     /**
@@ -134,14 +126,15 @@ public class KeenClient {
      * The event will be stored on the local file system until you decide to upload (usually this will happen
      * right before your app goes into the background, but it could be any time).
      *
+     * @param eventCollection The name of the event collection you want to put this event into.
      * @param event           A Map that consists of key/value pairs. Keen naming conventions apply (see docs).
      *                        Nested Maps and lists are acceptable (and encouraged!).
      * @param keenProperties  A Map that consists of key/value pairs to override default properties.
      *                        ex: "timestamp" -> Calendar.getInstance()
-     * @param eventCollection The name of the event collection you want to put this event into.
      * @throws KeenException
      */
-    public void addEvent(Map<String, Object> event, Map<String, Object> keenProperties, String eventCollection) throws KeenException {
+    public void addEvent(String eventCollection, Map<String, Object> event, Map<String, Object> keenProperties)
+            throws KeenException {
         validateEventCollection(eventCollection);
         validateEvent(event);
 
@@ -349,14 +342,13 @@ public class KeenClient {
     HttpURLConnection sendEvents(Map<String, List<Map<String, Object>>> requestDict) throws IOException {
         // just using basic JDK HTTP library
         String urlString = String.format("%s/%s/projects/%s/events", KeenConstants.SERVER_ADDRESS,
-                KeenConstants.API_VERSION, getProjectId());
+                KeenConstants.API_VERSION, getProjectToken());
         URL url = new URL(urlString);
 
         // set up the POST
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("POST");
         connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("Authorization", getApiKey());
         connection.setRequestProperty("Content-Type", "application/json");
         // we're writing
         connection.setDoOutput(true);
@@ -504,21 +496,12 @@ public class KeenClient {
     }
 
     /**
-     * Getter for the Keen Project ID associated with this instance of the {@link KeenClient}.
+     * Getter for the Keen Project Token associated with this instance of the {@link KeenClient}.
      *
-     * @return the Keen Project ID
+     * @return the Keen Project Token
      */
-    public String getProjectId() {
-        return projectId;
-    }
-
-    /**
-     * Getter for the Keen API Key associated with this instance of the {@link KeenClient}.
-     *
-     * @return the Keen API Key
-     */
-    public String getApiKey() {
-        return apiKey;
+    public String getProjectToken() {
+        return projectToken;
     }
 
     /**
