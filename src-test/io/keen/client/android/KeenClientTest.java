@@ -3,6 +3,7 @@ package io.keen.client.android;
 import android.content.Context;
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.keen.client.android.exceptions.KeenException;
+import io.keen.client.android.exceptions.NoWriteKeyException;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -15,6 +16,7 @@ import java.net.HttpURLConnection;
 import java.util.*;
 
 import static junit.framework.Assert.*;
+import static junit.framework.Assert.assertEquals;
 import static org.mockito.Mockito.*;
 
 /**
@@ -39,25 +41,28 @@ public class KeenClientTest {
     public void testKeenClientConstructor() {
         Context context = getMockedContext();
 
-        runKeenClientConstructorTest(null, null, true, "null context",
-                "Android Context cannot be null.");
-        runKeenClientConstructorTest(context, null, true, "null project token",
-                "Invalid project token specified: null");
-        runKeenClientConstructorTest(context, "", true, "empty project token",
-                "Invalid project token specified: ");
-        runKeenClientConstructorTest(context, "abc", false, "everything is good",
-                null);
+        runKeenClientConstructorTest(null, null, null, null, true, "null context",
+                                     "Android Context cannot be null.");
+        runKeenClientConstructorTest(context, null, null, null, true, "null project id",
+                                     "Invalid project ID specified: null");
+        runKeenClientConstructorTest(context, "", null, null, true, "empty project id",
+                                     "Invalid project ID specified: ");
+        runKeenClientConstructorTest(context, "abc", null, null, false, "everything is good",
+                                     null);
+        runKeenClientConstructorTest(context, "abc", "def", "ghi", false, "keys",
+                                     null);
     }
 
-    private void runKeenClientConstructorTest(Context context, String projectToken,
+    private void runKeenClientConstructorTest(Context context, String projectId,
+                                              String writeKey, String readKey,
                                               boolean shouldFail, String msg,
                                               String expectedMessage) {
         try {
-            KeenClient client = new KeenClient(context, projectToken);
+            KeenClient client = new KeenClient(context, projectId, writeKey, readKey);
             if (shouldFail) {
                 fail(msg);
             } else {
-                doClientAssertions(context, projectToken, client);
+                doClientAssertions(context, projectId, writeKey, readKey, client);
             }
         } catch (IllegalArgumentException e) {
             assertEquals(expectedMessage, e.getLocalizedMessage());
@@ -75,61 +80,75 @@ public class KeenClientTest {
 
         // make sure bad values error correctly
         try {
-            KeenClient.initialize(null, null);
+            KeenClient.initialize(null, null, null, null);
             fail("can't use bad values");
         } catch (IllegalArgumentException e) {
         }
 
         Context context = getMockedContext();
-        KeenClient.initialize(context, "abc");
+        KeenClient.initialize(context, "abc", "def", "ghi");
         KeenClient client = KeenClient.client();
-        doClientAssertions(context, "abc", client);
+        doClientAssertions(context, "abc", "def", "ghi", client);
     }
 
     @Test
     public void testInvalidEventCollection() throws KeenException {
         runAddEventTestFail(TestUtils.getSimpleEvent(), "$asd", "collection can't start with $",
-                "An event collection name cannot start with the dollar sign ($) character.");
+                            "An event collection name cannot start with the dollar sign ($) character.");
 
         String tooLong = TestUtils.getString(257);
         runAddEventTestFail(TestUtils.getSimpleEvent(), tooLong, "collection can't be longer than 256 chars",
-                "An event collection name cannot be longer than 256 characters.");
+                            "An event collection name cannot be longer than 256 characters.");
+    }
+
+    @Test
+    public void testAddEventNoWriteKey() throws KeenException, IOException {
+        KeenClient client = getClient("508339b0897a2c4282000000", null, null);
+        Map<String, Object> event = new HashMap<String, Object>();
+        event.put("test key", "test value");
+        try {
+            client.addEvent("foo", event);
+            fail("add event without write key should fail");
+        } catch (NoWriteKeyException e) {
+            assertEquals("You can't send events to Keen IO if you haven't set a write key.",
+                         e.getLocalizedMessage());
+        }
     }
 
     @Test
     public void testAddEvent() throws KeenException, IOException {
         runAddEventTestFail(null, "foo", "null event",
-                "You must specify a non-null, non-empty event.");
+                            "You must specify a non-null, non-empty event.");
 
         runAddEventTestFail(new HashMap<String, Object>(), "foo", "empty event",
-                "You must specify a non-null, non-empty event.");
+                            "You must specify a non-null, non-empty event.");
 
         Map<String, Object> event = new HashMap<String, Object>();
         event.put("keen", "reserved");
         runAddEventTestFail(event, "foo", "keen reserved",
-                "An event cannot contain a root-level property named 'keen'.");
+                            "An event cannot contain a root-level property named 'keen'.");
 
         event.remove("keen");
         event.put("ab.cd", "whatever");
         runAddEventTestFail(event, "foo", ". in property name",
-                "An event cannot contain a property with the period (.) character in it.");
+                            "An event cannot contain a property with the period (.) character in it.");
 
         event.remove("ab.cd");
         event.put("$a", "whatever");
         runAddEventTestFail(event, "foo", "$ at start of property name",
-                "An event cannot contain a property that starts with the dollar sign ($) character in it.");
+                            "An event cannot contain a property that starts with the dollar sign ($) character in it.");
 
         event.remove("$a");
         String tooLong = TestUtils.getString(257);
         event.put(tooLong, "whatever");
         runAddEventTestFail(event, "foo", "too long property name",
-                "An event cannot contain a property name longer than 256 characters.");
+                            "An event cannot contain a property name longer than 256 characters.");
 
         event.remove(tooLong);
         tooLong = TestUtils.getString(10000);
         event.put("long", tooLong);
         runAddEventTestFail(event, "foo", "too long property value",
-                "An event cannot contain a string property value longer than 10,000 characters.");
+                            "An event cannot contain a string property value longer than 10,000 characters.");
 
         // now do a basic add
         event.remove("long");
@@ -503,7 +522,8 @@ public class KeenClientTest {
         return client;
     }
 
-    private Map<String, Object> getFirstEventForCollection(KeenClient client, String eventCollection) throws IOException {
+    private Map<String, Object> getFirstEventForCollection(KeenClient client,
+                                                           String eventCollection) throws IOException {
         File dir = client.getEventDirectoryForEventCollection(eventCollection);
         File[] files = client.getFilesInDir(dir);
         if (files.length == 0) {
@@ -525,18 +545,21 @@ public class KeenClientTest {
         }
     }
 
-    private void doClientAssertions(Context expectedContext, String expectedProjectToken,
-                                    KeenClient client) {
+    private void doClientAssertions(Context expectedContext, String expectedProjectId,
+                                    String expectedWriteKey, String expectedReadKey, KeenClient client) {
         assertEquals(expectedContext, client.getContext());
-        assertEquals(expectedProjectToken, client.getProjectToken());
+        assertEquals(expectedProjectId, client.getProjectId());
+        assertEquals(expectedWriteKey, client.getWriteKey());
+        assertEquals(expectedReadKey, client.getReadKey());
     }
 
     private KeenClient getClient() {
-        return getClient("508339b0897a2c4282000000");
+        return getClient("508339b0897a2c4282000000", "80ce00d60d6443118017340c42d1cfaf",
+                         "80ce00d60d6443118017340c42d1cfaf");
     }
 
-    private KeenClient getClient(String projectToken) {
-        KeenClient client = new KeenClient(getMockedContext(), projectToken);
+    private KeenClient getClient(String projectId, String writeKey, String readKey) {
+        KeenClient client = new KeenClient(getMockedContext(), projectId, writeKey, readKey);
         client.setIsRunningTests(true);
         return client;
     }

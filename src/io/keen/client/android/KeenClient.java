@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import io.keen.client.android.exceptions.InvalidEventCollectionException;
 import io.keen.client.android.exceptions.InvalidEventException;
 import io.keen.client.android.exceptions.KeenException;
+import io.keen.client.android.exceptions.NoWriteKeyException;
 
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -21,7 +22,8 @@ import java.util.*;
  * Example usage:
  * <p/>
  * <pre>
- *     KeenClient.initialize(getApplicationContext(), "my_project_token");
+ *     KeenClient.initialize(getApplicationContext(), "my_project_id",
+ *                           "my_write_key", "my_read_key");
  *     Map<String, Object> myEvent = new HashMap<String, Object>();
  *     myEvent.put("property name", "property value");
  *     KeenClient.client().addEvent(myEvent, "purchases");
@@ -46,16 +48,18 @@ public class KeenClient {
     }
 
     /**
-     * Call this to initialize the singleton instance of KeenClient and set its project token.
+     * Call this to initialize the singleton instance of KeenClient and set its Project ID and access keys.
      * <p/>
      * You'll generally want to call this at the very beginning of your application's lifecycle. Once you've called
      * this, you can then call KeenClient.client() afterwards.
      *
-     * @param context      The Android context of your application.
-     * @param projectToken The Keen IO Project Token.
+     * @param context   The Android context of your application.
+     * @param projectId The Keen IO Project ID.
+     * @param writeKey  A Keen IO Write Key.
+     * @param readKey   A Keen IO Read Key.
      */
-    public static void initialize(Context context, String projectToken) {
-        ClientSingleton.INSTANCE.client = new KeenClient(context, projectToken);
+    public static void initialize(Context context, String projectId, String writeKey, String readKey) {
+        ClientSingleton.INSTANCE.client = new KeenClient(context, projectId, writeKey, readKey);
     }
 
     /**
@@ -75,7 +79,9 @@ public class KeenClient {
     /////////////////////////////////////////////
 
     private final Context context;
-    private final String projectToken;
+    private final String projectId;
+    private final String writeKey;
+    private final String readKey;
     private GlobalPropertiesEvaluator globalPropertiesEvaluator;
     private Map<String, Object> globalProperties;
     private boolean isRunningTests;
@@ -84,19 +90,23 @@ public class KeenClient {
      * Call this if your code needs to use more than one Keen project (or if you don't want to use
      * the managed, singleton instance provided by this library).
      *
-     * @param context      The Android context of your application.
-     * @param projectToken The Keen IO project token.
+     * @param context   The Android context of your application.
+     * @param projectId The Keen IO project ID.
+     * @param writeKey  A Keen IO Write Key.
+     * @param readKey   A Keen IO Read Key.
      */
-    public KeenClient(Context context, String projectToken) {
+    public KeenClient(Context context, String projectId, String writeKey, String readKey) {
         if (context == null) {
             throw new IllegalArgumentException("Android Context cannot be null.");
         }
-        if (projectToken == null || projectToken.length() == 0) {
-            throw new IllegalArgumentException("Invalid project token specified: " + projectToken);
+        if (projectId == null || projectId.length() == 0) {
+            throw new IllegalArgumentException("Invalid project ID specified: " + projectId);
         }
 
         this.context = context;
-        this.projectToken = projectToken;
+        this.projectId = projectId;
+        this.writeKey = writeKey;
+        this.readKey = readKey;
         this.globalPropertiesEvaluator = null;
         this.globalProperties = null;
         this.isRunningTests = false;
@@ -135,6 +145,10 @@ public class KeenClient {
      */
     public void addEvent(String eventCollection, Map<String, Object> event, Map<String, Object> keenProperties)
             throws KeenException {
+        if (getWriteKey() == null) {
+            throw new NoWriteKeyException("You can't send events to Keen IO if you haven't set a write key.");
+        }
+
         validateEventCollection(eventCollection);
         validateEvent(event);
 
@@ -160,7 +174,7 @@ public class KeenClient {
                 File f = fileList.get(i);
                 if (!f.delete()) {
                     KeenLogging.log(String.format("CRITICAL: can't delete file %s, cache is going to be too big",
-                            f.getAbsolutePath()));
+                                                  f.getAbsolutePath()));
                 }
             }
         }
@@ -201,17 +215,19 @@ public class KeenClient {
             MAPPER.writeValue(fileForEvent, newEvent);
         } catch (IOException e) {
             KeenLogging.log(String.format("There was an error while JSON serializing an event to: %s",
-                    fileForEvent.getAbsolutePath()));
+                                          fileForEvent.getAbsolutePath()));
             e.printStackTrace();
         }
     }
 
     private void validateEventCollection(String eventCollection) throws InvalidEventCollectionException {
         if (eventCollection == null || eventCollection.length() == 0) {
-            throw new InvalidEventCollectionException("You must specify a non-null, non-empty event collection: " + eventCollection);
+            throw new InvalidEventCollectionException("You must specify a non-null, " +
+                                                              "non-empty event collection: " + eventCollection);
         }
         if (eventCollection.startsWith("$")) {
-            throw new InvalidEventCollectionException("An event collection name cannot start with the dollar sign ($) character.");
+            throw new InvalidEventCollectionException("An event collection name cannot start with the dollar sign ($)" +
+                                                              " character.");
         }
         if (eventCollection.length() > 256) {
             throw new InvalidEventCollectionException("An event collection name cannot be longer than 256 characters.");
@@ -236,10 +252,12 @@ public class KeenClient {
         for (Map.Entry<String, Object> entry : event.entrySet()) {
             String key = entry.getKey();
             if (key.contains(".")) {
-                throw new InvalidEventException("An event cannot contain a property with the period (.) character in it.");
+                throw new InvalidEventException("An event cannot contain a property with the period (.) character in " +
+                                                        "it.");
             }
             if (key.startsWith("$")) {
-                throw new InvalidEventException("An event cannot contain a property that starts with the dollar sign ($) character in it.");
+                throw new InvalidEventException("An event cannot contain a property that starts with the dollar sign " +
+                                                        "($) character in it.");
             }
             if (key.length() > 256) {
                 throw new InvalidEventException("An event cannot contain a property name longer than 256 characters.");
@@ -248,7 +266,8 @@ public class KeenClient {
             if (value instanceof String) {
                 String strValue = (String) value;
                 if (strValue.length() >= 10000) {
-                    throw new InvalidEventException("An event cannot contain a string property value longer than 10,000 characters.");
+                    throw new InvalidEventException("An event cannot contain a string property value longer than 10," +
+                                                            "000 characters.");
                 }
             } else if (value instanceof Map) {
                 validateEvent((Map<String, Object>) value, depth + 1);
@@ -320,8 +339,10 @@ public class KeenClient {
             if (connection.getResponseCode() == 200) {
                 // if the response was good, then handle it appropriately
                 Map<String, List<Map<String, Object>>> responseBody = MAPPER.readValue(input,
-                        new TypeReference<Map<String, List<Map<String, Object>>>>() {
-                        });
+                                                                                       new TypeReference<Map<String,
+                                                                                               List<Map<String,
+                                                                                                       Object>>>>() {
+                                                                                       });
                 handleApiResponse(responseBody, fileMap);
             } else {
                 // if the response was bad, make a note of it
@@ -342,7 +363,7 @@ public class KeenClient {
     HttpURLConnection sendEvents(Map<String, List<Map<String, Object>>> requestDict) throws IOException {
         // just using basic JDK HTTP library
         String urlString = String.format("%s/%s/projects/%s/events", KeenConstants.SERVER_ADDRESS,
-                KeenConstants.API_VERSION, getProjectToken());
+                                         KeenConstants.API_VERSION, getProjectId());
         URL url = new URL(urlString);
 
         // set up the POST
@@ -350,6 +371,7 @@ public class KeenClient {
         connection.setRequestMethod("POST");
         connection.setRequestProperty("Accept", "application/json");
         connection.setRequestProperty("Content-Type", "application/json");
+        connection.setRequestProperty("Authorization", getWriteKey());
         // we're writing
         connection.setDoOutput(true);
         OutputStream out = connection.getOutputStream();
@@ -379,12 +401,13 @@ public class KeenClient {
                             errorCode.equals(KeenConstants.INVALID_PROPERTY_VALUE_ERROR)) {
                         deleteFile = true;
                         KeenLogging.log("An invalid event was found. Deleting it. Error: " +
-                                errorDict.get(KeenConstants.DESCRIPTION_PARAM));
+                                                errorDict.get(KeenConstants.DESCRIPTION_PARAM));
                     } else {
                         String description = (String) errorDict.get(KeenConstants.DESCRIPTION_PARAM);
                         deleteFile = false;
                         KeenLogging.log(String.format("The event could not be inserted for some reason. " +
-                                "Error name and description: %s %s", errorCode, description));
+                                                              "Error name and description: %s %s", errorCode,
+                                                      description));
                     }
                 }
 
@@ -394,7 +417,7 @@ public class KeenClient {
                     File eventFile = fileDict.get(getEventDirectoryForEventCollection(collectionName)).get(count);
                     if (!eventFile.delete()) {
                         KeenLogging.log(String.format("CRITICAL ERROR: Could not remove event at %s",
-                                eventFile.getAbsolutePath()));
+                                                      eventFile.getAbsolutePath()));
                     } else {
                         KeenLogging.log(String.format("Successfully deleted file: %s", eventFile.getAbsolutePath()));
                     }
@@ -449,7 +472,7 @@ public class KeenClient {
         File file = new File(getKeenCacheDirectory(), eventCollection);
         if (!file.exists()) {
             KeenLogging.log("Cache directory for event collection '" + eventCollection + "' doesn't exist. " +
-                    "Creating it.");
+                                    "Creating it.");
             if (!file.mkdirs()) {
                 KeenLogging.log("Can't create dir: " + file.getAbsolutePath());
             }
@@ -496,12 +519,30 @@ public class KeenClient {
     }
 
     /**
-     * Getter for the Keen Project Token associated with this instance of the {@link KeenClient}.
+     * Getter for the Keen Project ID associated with this instance of the {@link KeenClient}.
      *
-     * @return the Keen Project Token
+     * @return the Keen Project ID
      */
-    public String getProjectToken() {
-        return projectToken;
+    public String getProjectId() {
+        return projectId;
+    }
+
+    /**
+     * Getter for the Write Key associated with this instance of the {@link KeenClient}.
+     *
+     * @return the Write Key
+     */
+    public String getWriteKey() {
+        return writeKey;
+    }
+
+    /**
+     * Getter for the Read Key associated with this instance of the {@link KeenClient}.
+     *
+     * @return the Read Key
+     */
+    public String getReadKey() {
+        return readKey;
     }
 
     /**
