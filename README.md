@@ -81,6 +81,10 @@ That's it! After running your code, check your Keen IO Project to see the event 
 
 ### Changelog
 
+##### 1.0.2
+
++ If keen cache directory doesn't exist, create it.
+
 ##### 1.0.1
 
 + Changed project token -> project ID.
