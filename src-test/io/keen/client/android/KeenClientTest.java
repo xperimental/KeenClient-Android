@@ -474,6 +474,19 @@ public class KeenClientTest {
         assertEquals(3, storedEvent.size());
     }
 
+    @Test
+    public void testGetKeenCacheDirectory() throws Exception {
+        File dir = new File(getMockedContext().getCacheDir(), "keen");
+        if (dir.exists()) {
+            assert dir.delete();
+        }
+
+        KeenClient client = getClient();
+        Map<String, Object> event = new HashMap<String, Object>();
+        event.put("a", "apple");
+        client.addEvent("foo", event);
+    }
+
     private void addSimpleEventAndUpload(KeenClient mockedClient) throws KeenException {
         Map<String, Object> event = new HashMap<String, Object>();
         event.put("a", "apple");

@@ -449,7 +449,14 @@ public class KeenClient {
     }
 
     private File getKeenCacheDirectory() {
-        return new File(getDeviceCacheDirectory(), "keen");
+        File file = new File(getDeviceCacheDirectory(), "keen");
+        if (!file.exists()) {
+            boolean dirMade = file.mkdir();
+            if (!dirMade) {
+                throw new RuntimeException("Could not make keen cache directory at: " + file.getAbsolutePath());
+            }
+        }
+        return file;
     }
 
     private File[] getKeenCacheSubDirectories() {
