@@ -335,8 +335,8 @@ public class KeenClient {
         // START HTTP REQUEST, WRITE JSON TO REQUEST STREAM
         try {
             HttpURLConnection connection = sendEvents(requestMap);
-            InputStream input = connection.getInputStream();
             if (connection.getResponseCode() == 200) {
+                InputStream input = connection.getInputStream();
                 // if the response was good, then handle it appropriately
                 Map<String, List<Map<String, Object>>> responseBody = MAPPER.readValue(input,
                                                                                        new TypeReference<Map<String,
@@ -347,6 +347,7 @@ public class KeenClient {
             } else {
                 // if the response was bad, make a note of it
                 KeenLogging.log(String.format("Response code was NOT 200. It was: %d", connection.getResponseCode()));
+                InputStream input = connection.getErrorStream();
                 String responseBody = KeenUtils.convertStreamToString(input);
                 KeenLogging.log(String.format("Response body was: %s", responseBody));
             }

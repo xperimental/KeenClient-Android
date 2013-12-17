@@ -528,7 +528,11 @@ public class KeenClientTest {
         ByteArrayInputStream stream = new ByteArrayInputStream(bytes);
         HttpURLConnection connMock = mock(HttpURLConnection.class);
         when(connMock.getResponseCode()).thenReturn(statusCode);
-        when(connMock.getInputStream()).thenReturn(stream);
+        if (statusCode == 200) {
+            when(connMock.getInputStream()).thenReturn(stream);
+        } else {
+            when(connMock.getErrorStream()).thenReturn(stream);
+        }
 
         doReturn(connMock).when(client).sendEvents(Matchers.<Map<String, List<Map<String, Object>>>>any());
 
