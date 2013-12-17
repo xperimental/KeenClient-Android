@@ -42,15 +42,15 @@ public class KeenClientTest {
         Context context = getMockedContext();
 
         runKeenClientConstructorTest(null, null, null, null, true, "null context",
-                                     "Android Context cannot be null.");
+                "Android Context cannot be null.");
         runKeenClientConstructorTest(context, null, null, null, true, "null project id",
-                                     "Invalid project ID specified: null");
+                "Invalid project ID specified: null");
         runKeenClientConstructorTest(context, "", null, null, true, "empty project id",
-                                     "Invalid project ID specified: ");
+                "Invalid project ID specified: ");
         runKeenClientConstructorTest(context, "abc", null, null, false, "everything is good",
-                                     null);
+                null);
         runKeenClientConstructorTest(context, "abc", "def", "ghi", false, "keys",
-                                     null);
+                null);
     }
 
     private void runKeenClientConstructorTest(Context context, String projectId,
@@ -92,13 +92,113 @@ public class KeenClientTest {
     }
 
     @Test
+    public void testUploadNoEvents() {
+        // shouldn't cause any uncatchable (async task) exception
+        // needed to move above other upload tests to get this to repro the bug?
+        try {
+            KeenClient client = getMockedClient(null, 200);
+            // don't add any events
+            client.upload(null);
+        } catch (Exception e){
+            fail("Calling upload with no events caused an exception! \n" + e.toString());
+        }
+    }
+
+    @Test
+    public void testUploadEventAndThenUploadNoEvents()  {
+        // internally catches and logs ERROR: There was a JsonMappingException while sending {foo=[]}
+        try {
+            KeenClient client = getMockedClient(null, 200);
+            Map<String, Object> event = TestUtils.getSimpleEvent();
+            client.addEvent("foo", event);
+            // upload some events
+            client.upload(null);
+            // don't add any more events
+            client.upload(null);
+        } catch (Exception e){
+            fail("Calling upload twice, second time with no events caused an exception! \n" + e.toString());
+        }
+    }
+
+    @Test
+    public void testUploadEventAndThenUploadSameEventAgain()  {
+        // internally catches and logs ERROR: There was a JsonMappingException while sending
+        // {foo=[{a=b, keen={timestamp=2013-12-18T19:11:50.311+0000}}]}
+        try {
+            KeenClient client = getMockedClient(null, 200);
+            Map<String, Object> event = TestUtils.getSimpleEvent();
+            client.addEvent("foo", event);
+            // upload some events
+            client.upload(null);
+            // add a different collection event
+            client = getMockedClient(null, 200);
+            client.addEvent("foo", event);
+            //client.addEvent("bar", event);
+            client.upload(null);
+        } catch (Exception e){
+            fail("Calling upload twice, second time with same event caused an exception! \n" + e.toString());
+        }
+    }
+
+    @Test
+    public void testUploadEventAndThenUploadNewEventButNotOld()  {
+        // internally catches and logs ERROR: There was a JsonMappingException while sending
+        // {foo=[], bar=[{a=b, keen={timestamp=2013-12-18T19:11:50.316+0000}}]}
+        try {
+            Object individualResult = buildResult(true, null, null);
+            List<Object> list = new ArrayList<Object>();
+            list.add(individualResult);
+            Map<String, Object> resultFoo = new HashMap<String, Object>();
+            String eventCollectionFoo = "foo";
+            resultFoo.put(eventCollectionFoo, list);
+
+            Map<String, Object> resultBar = new HashMap<String, Object>();
+            String eventCollectionBar = "bar";
+            resultBar.put(eventCollectionBar, list);
+
+
+            KeenClient client = getMockedClient(resultFoo, 200);
+            Map<String, Object> event = TestUtils.getSimpleEvent();
+            client.addEvent("foo", event);
+            // upload some events
+            client.upload(null);
+            // add a different collection event
+            client = getMockedClient(resultBar, 200);
+            client.addEvent("bar", event);
+            client.upload(null);
+        } catch (Exception e){
+            fail("Calling upload twice, second time with different event caused an exception! \n" + e.toString());
+        }
+    }
+
+    @Test
+    public void testUploadEventAndThenUploadNewEventAndOld()  {
+        // internally catches and logs ERROR: There was a JsonMappingException while sending
+        // {foo=[{a=b, keen={timestamp=2013-12-18T19:11:50.321+0000}}], bar=[{a=b, keen={timestamp=2013-12-18T19:11:50.323+0000}}]}
+        try {
+            KeenClient client = getMockedClient(null, 200);
+            Map<String, Object> event = TestUtils.getSimpleEvent();
+            client.addEvent("foo", event);
+            // upload some events
+            client.upload(null);
+            // add a different collection event
+            client = getMockedClient(null, 200);
+            client.addEvent("foo", event);
+            client.addEvent("bar", event);
+            client.upload(null);
+        } catch (Exception e){
+            fail("Calling upload twice, second time with different event caused an exception! \n" + e.toString());
+        }
+    }
+
+    @Test
     public void testInvalidEventCollection() throws KeenException {
         runAddEventTestFail(TestUtils.getSimpleEvent(), "$asd", "collection can't start with $",
-                            "An event collection name cannot start with the dollar sign ($) character.");
+                "An event collection name cannot start with the dollar sign ($) character.");
 
         String tooLong = TestUtils.getString(257);
         runAddEventTestFail(TestUtils.getSimpleEvent(), tooLong, "collection can't be longer than 256 chars",
-                            "An event collection name cannot be longer than 256 characters.");
+                "An event collection name cannot be longer than 256 characters.");
     }
 
     @Test
@@ -111,44 +211,44 @@ public class KeenClientTest {
             fail("add event without write key should fail");
         } catch (NoWriteKeyException e) {
             assertEquals("You can't send events to Keen IO if you haven't set a write key.",
-                         e.getLocalizedMessage());
+                    e.getLocalizedMessage());
         }
     }
 
     @Test
     public void testAddEvent() throws KeenException, IOException {
         runAddEventTestFail(null, "foo", "null event",
-                            "You must specify a non-null, non-empty event.");
+                "You must specify a non-null, non-empty event.");
 
         runAddEventTestFail(new HashMap<String, Object>(), "foo", "empty event",
-                            "You must specify a non-null, non-empty event.");
+                "You must specify a non-null, non-empty event.");
 
         Map<String, Object> event = new HashMap<String, Object>();
         event.put("keen", "reserved");
         runAddEventTestFail(event, "foo", "keen reserved",
-                            "An event cannot contain a root-level property named 'keen'.");
+                "An event cannot contain a root-level property named 'keen'.");
 
         event.remove("keen");
         event.put("ab.cd", "whatever");
         runAddEventTestFail(event, "foo", ". in property name",
-                            "An event cannot contain a property with the period (.) character in it.");
+                "An event cannot contain a property with the period (.) character in it.");
 
         event.remove("ab.cd");
         event.put("$a", "whatever");
         runAddEventTestFail(event, "foo", "$ at start of property name",
-                            "An event cannot contain a property that starts with the dollar sign ($) character in it.");
+                "An event cannot contain a property that starts with the dollar sign ($) character in it.");
 
         event.remove("$a");
         String tooLong = TestUtils.getString(257);
         event.put(tooLong, "whatever");
         runAddEventTestFail(event, "foo", "too long property name",
-                            "An event cannot contain a property name longer than 256 characters.");
+                "An event cannot contain a property name longer than 256 characters.");
 
         event.remove(tooLong);
         tooLong = TestUtils.getString(10000);
         event.put("long", tooLong);
         runAddEventTestFail(event, "foo", "too long property value",
-                            "An event cannot contain a string property value longer than 10,000 characters.");
+                "An event cannot contain a string property value longer than 10,000 characters.");
 
         // now do a basic add
         event.remove("long");
@@ -572,7 +672,7 @@ public class KeenClientTest {
 
     private KeenClient getClient() {
         return getClient("508339b0897a2c4282000000", "80ce00d60d6443118017340c42d1cfaf",
-                         "80ce00d60d6443118017340c42d1cfaf");
+                "80ce00d60d6443118017340c42d1cfaf");
     }
 
     private KeenClient getClient(String projectId, String writeKey, String readKey) {
