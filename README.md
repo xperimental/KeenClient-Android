@@ -81,6 +81,10 @@ That's it! After running your code, check your Keen IO Project to see the event 
 
 ### Changelog
 
+##### 1.0.3
+
++ Fix a number of potential issues related to the keen cache directory being in weird states.
+
 ##### 1.0.2
 
 + If keen cache directory doesn't exist, create it.
