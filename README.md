@@ -17,7 +17,9 @@ Download the jar [here](http://keen.io/static/code/KeenClient-Android.jar).
 
 If it’s not already present, add the INTERNET permission to your AndroidManifest.xml file. The entry below should appear between the <manifest> .. </manifest> tags.
 
+```java
     <uses-permission android:name="android.permission.INTERNET"/>
+```
 
 ### Usage
 
@@ -25,6 +27,7 @@ To use this client with the Keen IO API, you have to configure your Keen IO Proj
 
 ##### Register Your Project ID and Access Keys
 
+```java
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
@@ -32,13 +35,15 @@ To use this client with the Keen IO API, you have to configure your Keen IO Proj
         // initialize the Keen Client with your Project Token.
         KeenClient.initialize(getApplicationContext(), KEEN_PROJECT_TOKEN, KEEN_WRITE_KEY, KEEN_READ_KEY);
     }
+```
 
-The write key is required to send events to Keen IO - the read key is required to do analysis on Keen IO.
+The write key is required to send events to Keen IO. The read key is required to do analysis on Keen IO.
 
 ##### Add Events
 
 Here’s a very basic example for an app that tracks "purchases" whenever the app is resumed:
 
+```java
     @Override
     protected void onResume() {
         super.onResume();
@@ -55,11 +60,13 @@ Here’s a very basic example for an app that tracks "purchases" whenever the ap
             e.printStackTrace();
         }
     }
+```
 
 ##### Upload Events to Keen IO
 
 Adding events just stores the events locally on the device. You must explicitly upload them to Keen IO. Here's an example:
 
+```java
     @Override
     protected void onPause() {
         // upload all captured events to Keen
@@ -72,10 +79,11 @@ Adding events just stores the events locally on the device. You must explicitly 
 
         super.onPause();
     }
+```
 
 ##### Do analysis with Keen IO
 
-    TODO
+    TO DO
 
 That's it! After running your code, check your Keen IO Project to see the event has been added.
 
