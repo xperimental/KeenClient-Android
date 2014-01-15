@@ -58,18 +58,16 @@ public class KeenClientTest {
                                               String writeKey, String readKey,
                                               boolean shouldFail, String msg,
                                               String expectedMessage) {
+
         try {
-            KeenClient client = null;
-            try {
-                client = new KeenClient(context, projectId, writeKey, readKey);
-            } catch (KeenInitializationException e) {
-                fail(String.format("KeenInitializationException during client construction %s", e.toString()));
-            }
+            KeenClient client = new KeenClient(context, projectId, writeKey, readKey);
             if (shouldFail) {
                 fail(msg);
             } else {
                 doClientAssertions(context, projectId, writeKey, readKey, client);
             }
+        } catch (KeenInitializationException e) {
+            fail(String.format("KeenInitializationException during client construction %s", e.toString()));
         } catch (IllegalArgumentException e) {
             assertEquals(expectedMessage, e.getLocalizedMessage());
         }
