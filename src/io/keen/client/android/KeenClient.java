@@ -56,7 +56,8 @@ public class KeenClient {
      * @param writeKey  A Keen IO Write Key.
      * @param readKey   A Keen IO Read Key.
      */
-    public static void initialize(Context context, String projectId, String writeKey, String readKey) {
+    public static void initialize(Context context, String projectId, String writeKey, String readKey)
+            throws KeenInitializationException {
         ClientSingleton.INSTANCE.client = new KeenClient(context, projectId, writeKey, readKey);
     }
 
@@ -83,6 +84,7 @@ public class KeenClient {
     private GlobalPropertiesEvaluator globalPropertiesEvaluator;
     private Map<String, Object> globalProperties;
     private boolean isRunningTests;
+    private boolean active;
 
     /**
      * Call this if your code needs to use more than one Keen project (or if you don't want to use
@@ -93,7 +95,8 @@ public class KeenClient {
      * @param writeKey  A Keen IO Write Key.
      * @param readKey   A Keen IO Read Key.
      */
-    public KeenClient(Context context, String projectId, String writeKey, String readKey) {
+    public KeenClient(Context context, String projectId, String writeKey, String readKey)
+            throws KeenInitializationException {
         if (context == null) {
             throw new IllegalArgumentException("Android Context cannot be null.");
         }
@@ -108,7 +111,13 @@ public class KeenClient {
         this.globalPropertiesEvaluator = null;
         this.globalProperties = null;
         this.isRunningTests = false;
+        this.active = true;
         KeenLogging.log("Keen using cache " + getKeenCacheDirectory().toString()); // this will init the cache if needed
+        if (!this.isKeenCacheInitialized()) {
+            this.setActive(false);
+            throw new KeenInitializationException("Keen was unable to create a cache directory. Check logs for file " +
+                    "permissions details. Keen has been disabled, recreate your Keen client to try cache creation again.");
+        }
     }
 
     /////////////////////////////////////////////
@@ -125,7 +134,12 @@ public class KeenClient {
      * @throws KeenException
      */
     public void addEvent(String eventCollection, Map<String, Object> event) throws KeenException {
-        addEvent(eventCollection, event, null);
+        if (this.isActive()) {
+            addEvent(eventCollection, event, null);
+        } else {
+            KeenLogging.log(String.format("WARN Did not addEvent because KeenClient is not active. Event:\n %s, %s, %s",
+                    eventCollection, event, null));
+        }
     }
 
     /**
@@ -144,78 +158,83 @@ public class KeenClient {
      */
     public void addEvent(String eventCollection, Map<String, Object> event, Map<String, Object> keenProperties)
             throws KeenException {
-        if (getWriteKey() == null) {
-            throw new NoWriteKeyException("You can't send events to Keen IO if you haven't set a write key.");
-        }
+        if (this.isActive()) {
+            if (getWriteKey() == null) {
+                throw new NoWriteKeyException("You can't send events to Keen IO if you haven't set a write key.");
+            }
 
-        validateEventCollection(eventCollection);
-        validateEvent(event);
+            validateEventCollection(eventCollection);
+            validateEvent(event);
 
-        File dir = getEventDirectoryForEventCollection(eventCollection);
-        // make sure it exists
-        createDirIfItDoesNotExist(dir);
-        // now make sure we haven't hit the max number of events in this collection already
-        File[] files = getFilesInDir(dir);
-        if (files.length >= getMaxEventsPerCollection()) {
-            // need to age out old data so the cache doesn't grow too large
-            KeenLogging.log(String.format("Too many events in cache for %s, aging out old data", eventCollection));
-            KeenLogging.log(String.format("Count: %d and Max: %d", files.length, getMaxEventsPerCollection()));
+            File dir = getEventDirectoryForEventCollection(eventCollection);
+            // make sure it exists
+            createDirIfItDoesNotExist(dir);
+            // now make sure we haven't hit the max number of events in this collection already
+            File[] files = getFilesInDir(dir);
+            if (files.length >= getMaxEventsPerCollection()) {
+                // need to age out old data so the cache doesn't grow too large
+                KeenLogging.log(String.format("Too many events in cache for %s, aging out old data", eventCollection));
+                KeenLogging.log(String.format("Count: %d and Max: %d", files.length, getMaxEventsPerCollection()));
 
-            // delete the eldest (i.e. first we have to sort the list by name)
-            List<File> fileList = Arrays.asList(files);
-            Collections.sort(fileList, new Comparator<File>() {
-                @Override
-                public int compare(File file, File file1) {
-                    return file.getAbsolutePath().compareToIgnoreCase(file1.getAbsolutePath());
-                }
-            });
-            for (int i = 0; i < getNumberEventsToForget(); i++) {
-                File f = fileList.get(i);
-                if (!f.delete()) {
-                    KeenLogging.log(String.format("CRITICAL: can't delete file %s, cache is going to be too big",
-                            f.getAbsolutePath()));
+                // delete the eldest (i.e. first we have to sort the list by name)
+                List<File> fileList = Arrays.asList(files);
+                Collections.sort(fileList, new Comparator<File>() {
+                    @Override
+                    public int compare(File file, File file1) {
+                        return file.getAbsolutePath().compareToIgnoreCase(file1.getAbsolutePath());
+                    }
+                });
+                for (int i = 0; i < getNumberEventsToForget(); i++) {
+                    File f = fileList.get(i);
+                    if (!f.delete()) {
+                        KeenLogging.log(String.format("CRITICAL: can't delete file %s, cache is going to be too big",
+                                f.getAbsolutePath()));
+                    }
                 }
             }
-        }
 
-        KeenLogging.log(String.format("Adding event to collection: %s", eventCollection));
+            KeenLogging.log(String.format("Adding event to collection: %s", eventCollection));
 
-        // build the event
-        Map<String, Object> newEvent = new HashMap<String, Object>();
-        // handle keen properties
-        Calendar timestamp = Calendar.getInstance();
-        if (keenProperties == null) {
-            keenProperties = new HashMap<String, Object>();
-            keenProperties.put("timestamp", timestamp);
-        } else {
-            if (!keenProperties.containsKey("timestamp")) {
+            // build the event
+            Map<String, Object> newEvent = new HashMap<String, Object>();
+            // handle keen properties
+            Calendar timestamp = Calendar.getInstance();
+            if (keenProperties == null) {
+                keenProperties = new HashMap<String, Object>();
                 keenProperties.put("timestamp", timestamp);
+            } else {
+                if (!keenProperties.containsKey("timestamp")) {
+                    keenProperties.put("timestamp", timestamp);
+                }
             }
-        }
-        newEvent.put("keen", keenProperties);
+            newEvent.put("keen", keenProperties);
 
-        // handle global properties
-        Map<String, Object> globalProperties = getGlobalProperties();
-        if (globalProperties != null) {
-            newEvent.putAll(globalProperties);
-        }
-        GlobalPropertiesEvaluator globalPropertiesEvaluator = getGlobalPropertiesEvaluator();
-        if (globalPropertiesEvaluator != null) {
-            Map<String, Object> props = globalPropertiesEvaluator.getGlobalProperties(eventCollection);
-            if (props != null) {
-                newEvent.putAll(props);
+            // handle global properties
+            Map<String, Object> globalProperties = getGlobalProperties();
+            if (globalProperties != null) {
+                newEvent.putAll(globalProperties);
             }
-        }
-        // now handle user-defined properties
-        newEvent.putAll(event);
+            GlobalPropertiesEvaluator globalPropertiesEvaluator = getGlobalPropertiesEvaluator();
+            if (globalPropertiesEvaluator != null) {
+                Map<String, Object> props = globalPropertiesEvaluator.getGlobalProperties(eventCollection);
+                if (props != null) {
+                    newEvent.putAll(props);
+                }
+            }
+            // now handle user-defined properties
+            newEvent.putAll(event);
 
-        File fileForEvent = getFileForEvent(eventCollection, timestamp);
-        try {
-            MAPPER.writeValue(fileForEvent, newEvent);
-        } catch (IOException e) {
-            KeenLogging.log(String.format("There was an error while JSON serializing an event to: %s",
-                    fileForEvent.getAbsolutePath()));
-            e.printStackTrace();
+            File fileForEvent = getFileForEvent(eventCollection, timestamp);
+            try {
+                MAPPER.writeValue(fileForEvent, newEvent);
+            } catch (IOException e) {
+                KeenLogging.log(String.format("There was an error while JSON serializing an event to: %s",
+                        fileForEvent.getAbsolutePath()));
+                e.printStackTrace();
+            }
+        } else {
+            KeenLogging.log(String.format("WARN Did not addEvent because KeenClient is not active/n %s, %s, %s",
+                    eventCollection, event, keenProperties));
         }
     }
 
@@ -287,12 +306,16 @@ public class KeenClient {
      *                 upload succeeded.
      */
     public void upload(final UploadFinishedCallback callback) {
-        if (isRunningTests) {
-            // if we're running tests, run synchronously
-            uploadHelper(callback);
+        if (this.isActive()) {
+            if (isRunningTests) {
+                // if we're running tests, run synchronously
+                uploadHelper(callback);
+            } else {
+                // otherwise run asynchronously
+                new UploadTask().execute(callback);
+            }
         } else {
-            // otherwise run asynchronously
-            new UploadTask().execute(callback);
+            KeenLogging.log("WARN Did not upload events because this KeenClient is not active");
         }
     }
 
@@ -490,9 +513,12 @@ public class KeenClient {
         if (!file.exists()) {
             boolean dirMade = file.mkdir();
             if (!dirMade) {
+                this.setActive(false);
                 KeenLogging.log(String.format("FATAL ERROR: Could not make keen cache directory at: %s\n" +
-                        "canRead: %s | canWrite: %s | canExecute: %s | isFile: %s", file.getAbsolutePath(),
+                        "canRead: %s | canWrite: %s | canExecute: %s | isFile: %s \nKeen has been disabled", file.getAbsolutePath(),
                         file.canRead(), file.canWrite(), file.canExecute(), file.isFile()));
+            } else {
+                this.setActive(true);
             }
         }
         return file;
@@ -589,6 +615,23 @@ public class KeenClient {
      */
     public String getReadKey() {
         return readKey;
+    }
+
+    /**
+     * Getter for the Active Flag for this instance of the {@link KeenClient}.
+     *
+     * @return whether the client is active or not
+     */
+    public boolean isActive() {
+        return active;
+    }
+
+    /**
+     * Setter for the Active Flag for this instance of the {@link KeenClient}. Deactivated when KeenClient has a problem
+     * during initialization.
+     */
+    private void setActive(boolean active) {
+        this.active = active;
     }
 
     /**
