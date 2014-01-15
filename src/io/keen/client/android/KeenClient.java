@@ -6,10 +6,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import io.keen.client.android.exceptions.InvalidEventCollectionException;
-import io.keen.client.android.exceptions.InvalidEventException;
-import io.keen.client.android.exceptions.KeenException;
-import io.keen.client.android.exceptions.NoWriteKeyException;
+import io.keen.client.android.exceptions.*;
 
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -111,6 +108,7 @@ public class KeenClient {
         this.globalPropertiesEvaluator = null;
         this.globalProperties = null;
         this.isRunningTests = false;
+        KeenLogging.log("Keen using cache " + getKeenCacheDirectory().toString()); // this will init the cache if needed
     }
 
     /////////////////////////////////////////////
@@ -469,6 +467,20 @@ public class KeenClient {
     // FILE IO
     /////////////////////////////////////////////
 
+    /**
+     * Call this to verify the cache was properly initialized during the creation of the KeenClient.
+     * <p/>
+     * If the cache wasn't able to be initialized, the KeenClient will log the failure but not take down
+     * your app with an unexpected Runtime Exception (due to the nature of Android's AsyncTask doPostExecute()).
+     * <p/>
+     * Check the logs to see if there are FATAL permissions issues with your cache directory.
+     *
+     */
+    public boolean isKeenCacheInitialized() {
+        File file = getKeenCacheDirectory();
+        return file.exists();
+    }
+
     File getDeviceCacheDirectory() {
         return getContext().getCacheDir();
     }
@@ -478,7 +490,9 @@ public class KeenClient {
         if (!file.exists()) {
             boolean dirMade = file.mkdir();
             if (!dirMade) {
-                throw new RuntimeException("Could not make keen cache directory at: " + file.getAbsolutePath());
+                KeenLogging.log(String.format("FATAL ERROR: Could not make keen cache directory at: %s\n" +
+                        "canRead: %s | canWrite: %s | canExecute: %s | isFile: %s", file.getAbsolutePath(),
+                        file.canRead(), file.canWrite(), file.canExecute(), file.isFile()));
             }
         }
         return file;

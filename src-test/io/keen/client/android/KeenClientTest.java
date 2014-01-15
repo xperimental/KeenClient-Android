@@ -92,6 +92,14 @@ public class KeenClientTest {
     }
 
     @Test
+    public void testCacheInitialization() {
+        Context context = getMockedContext();
+        KeenClient.initialize(context, "abc", "def", "ghi");
+        KeenClient client = KeenClient.client();
+        assertTrue(client.isKeenCacheInitialized());
+    }
+
+    @Test
     public void testUploadNoEvents() {
         // shouldn't cause any uncatchable (async task) exception
         // needed to move above other upload tests to get this to repro the bug?
