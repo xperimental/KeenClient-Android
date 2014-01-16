@@ -134,12 +134,7 @@ public class KeenClient {
      * @throws KeenException
      */
     public void addEvent(String eventCollection, Map<String, Object> event) throws KeenException {
-        if (this.isActive()) {
-            addEvent(eventCollection, event, null);
-        } else {
-            KeenLogging.log(String.format("WARN Did not addEvent because KeenClient is not active. Event:\n %s, %s, %s",
-                    eventCollection, event, null));
-        }
+         addEvent(eventCollection, event, null);
     }
 
     /**
@@ -233,7 +228,7 @@ public class KeenClient {
                 e.printStackTrace();
             }
         } else {
-            KeenLogging.log(String.format("WARN Did not addEvent because KeenClient is not active/n %s, %s, %s",
+            KeenLogging.log(String.format("WARN Did not addEvent because KeenClient is not active\n %s, %s, %s",
                     eventCollection, event, keenProperties));
         }
     }
