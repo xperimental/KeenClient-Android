@@ -134,7 +134,7 @@ public class KeenClient {
      * @throws KeenException
      */
     public void addEvent(String eventCollection, Map<String, Object> event) throws KeenException {
-         addEvent(eventCollection, event, null);
+        addEvent(eventCollection, event, null);
     }
 
     /**
