@@ -3,6 +3,7 @@ package io.keen.client.android;
 import android.content.Context;
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.keen.client.android.exceptions.KeenException;
+import io.keen.client.android.exceptions.KeenInitializationException;
 import io.keen.client.android.exceptions.NoWriteKeyException;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -57,6 +58,7 @@ public class KeenClientTest {
                                               String writeKey, String readKey,
                                               boolean shouldFail, String msg,
                                               String expectedMessage) {
+
         try {
             KeenClient client = new KeenClient(context, projectId, writeKey, readKey);
             if (shouldFail) {
@@ -64,13 +66,15 @@ public class KeenClientTest {
             } else {
                 doClientAssertions(context, projectId, writeKey, readKey, client);
             }
+        } catch (KeenInitializationException e) {
+            fail(String.format("KeenInitializationException during client construction %s", e.toString()));
         } catch (IllegalArgumentException e) {
             assertEquals(expectedMessage, e.getLocalizedMessage());
         }
     }
 
     @Test
-    public void testSharedClient() {
+    public void testSharedClient() throws KeenInitializationException {
         // can't get client without first initializing it
         try {
             KeenClient.client();
@@ -89,6 +93,30 @@ public class KeenClientTest {
         KeenClient.initialize(context, "abc", "def", "ghi");
         KeenClient client = KeenClient.client();
         doClientAssertions(context, "abc", "def", "ghi", client);
+    }
+
+    @Test
+    public void testCacheInitialization() throws KeenInitializationException {
+        Context context = getMockedContext();
+        KeenClient.initialize(context, "abc", "def", "ghi");
+        KeenClient client = KeenClient.client();
+        assertTrue(client.isKeenCacheInitialized());
+    }
+
+    @Test
+    public void testDisablingClient() throws KeenException, IOException {
+        Context context = getMockedContext();
+        KeenClient.initialize(context, "abc", "def", "ghi");
+        KeenClient client = getMockedInactiveClient(null, 200);
+        assertFalse(client.isActive());
+        // now do a basic add
+        Map<String, Object> event = new HashMap<String, Object>();
+        event.put("valid key", "valid value");
+        client.addEvent("foo", event);
+        // make sure the event's NOT there - client is not active
+        Map<String, Object> storedEvent = getFirstEventForCollection(client, "foo");
+        assertNull(storedEvent);
+        //assertEquals("valid value", storedEvent.get("valid key"));
     }
 
     @Test
@@ -615,7 +643,7 @@ public class KeenClientTest {
         return response;
     }
 
-    private KeenClient getMockedClient(Object data, int statusCode) throws IOException {
+    private KeenClient getMockedClient(Object data, int statusCode) throws IOException, KeenInitializationException {
         if (data == null) {
             data = buildResponseJson(true, null, null);
         }
@@ -639,6 +667,30 @@ public class KeenClientTest {
         return client;
     }
 
+    private KeenClient getMockedInactiveClient(Object data, int statusCode) throws IOException, KeenInitializationException {
+        if (data == null) {
+            data = buildResponseJson(true, null, null);
+        }
+
+        // set up the partial mock
+        KeenClient client = getClient();
+        client = spy(client);
+
+        byte[] bytes = KeenClient.MAPPER.writeValueAsBytes(data);
+        ByteArrayInputStream stream = new ByteArrayInputStream(bytes);
+        HttpURLConnection connMock = mock(HttpURLConnection.class);
+        when(connMock.getResponseCode()).thenReturn(statusCode);
+        if (statusCode == 200) {
+            when(connMock.getInputStream()).thenReturn(stream);
+        } else {
+            when(connMock.getErrorStream()).thenReturn(stream);
+        }
+
+        doReturn(connMock).when(client).sendEvents(Matchers.<Map<String, List<Map<String, Object>>>>any());
+        when(client.isActive()).thenReturn(false);
+        return client;
+    }
+
     private Map<String, Object> getFirstEventForCollection(KeenClient client,
                                                            String eventCollection) throws IOException {
         File dir = client.getEventDirectoryForEventCollection(eventCollection);
@@ -652,7 +704,7 @@ public class KeenClientTest {
     }
 
     private void runAddEventTestFail(Map<String, Object> event, String eventCollection, String msg,
-                                     String expectedMessage) {
+                                     String expectedMessage) throws KeenInitializationException {
         KeenClient client = getClient();
         try {
             client.addEvent(eventCollection, event);
@@ -670,12 +722,12 @@ public class KeenClientTest {
         assertEquals(expectedReadKey, client.getReadKey());
     }
 
-    private KeenClient getClient() {
+    private KeenClient getClient() throws KeenInitializationException {
         return getClient("508339b0897a2c4282000000", "80ce00d60d6443118017340c42d1cfaf",
                 "80ce00d60d6443118017340c42d1cfaf");
     }
 
-    private KeenClient getClient(String projectId, String writeKey, String readKey) {
+    private KeenClient getClient(String projectId, String writeKey, String readKey) throws KeenInitializationException {
         KeenClient client = new KeenClient(getMockedContext(), projectId, writeKey, readKey);
         client.setIsRunningTests(true);
         return client;

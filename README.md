@@ -33,7 +33,13 @@ To use this client with the Keen IO API, you have to configure your Keen IO Proj
         setContentView(R.layout.main);
 
         // initialize the Keen Client with your Project Token.
-        KeenClient.initialize(getApplicationContext(), KEEN_PROJECT_TOKEN, KEEN_WRITE_KEY, KEEN_READ_KEY);
+        try {
+            KeenClient.initialize(getApplicationContext(), KEEN_PROJECT_TOKEN, KEEN_WRITE_KEY, KEEN_READ_KEY);
+        } catch (KeenInitializationException e) {
+            // Keen is disabled. Handle the exception in a way that makes sense to you.
+            // To re-enable, try recreating the client?
+            e.printStackTrace();
+        }
     }
 ```
 
@@ -88,6 +94,10 @@ Adding events just stores the events locally on the device. You must explicitly 
 That's it! After running your code, check your Keen IO Project to see the event has been added.
 
 ### Changelog
+
+##### 1.0.4
+
++ Fix another edge case of the keen cache. Client initialization will now raise KeenInitializationException instead of a RuntimeException if the cache cannot be created. The error will be logged and the client will be deactivated. This state can be checked by client.isActive()
 
 ##### 1.0.3
 
