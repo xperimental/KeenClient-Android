@@ -2,6 +2,7 @@ package io.keen.client.android;
 
 import android.content.Context;
 import android.os.AsyncTask;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -227,6 +228,16 @@ public class KeenClient {
                         fileForEvent.getAbsolutePath()));
                 e.printStackTrace();
             }
+
+            if (KeenLogging.isLoggingEnabled()) {
+                try {
+                    String eventString = MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(newEvent);
+                    KeenLogging.log(String.format("Wrote event: %s", eventString));
+                } catch (JsonProcessingException e) {
+                    KeenLogging.log("Couldn't log event written to file: ");
+                    e.printStackTrace();
+                }
+            }
         } else {
             KeenLogging.log(String.format("WARN Did not addEvent because KeenClient is not active\n %s, %s, %s",
                     eventCollection, event, keenProperties));
@@ -380,6 +391,11 @@ public class KeenClient {
                         InputStream input = connection.getErrorStream();
                         String responseBody = KeenUtils.convertStreamToString(input);
                         KeenLogging.log(String.format("Response body was: %s", responseBody));
+                    }
+
+                    if (KeenLogging.isLoggingEnabled()) {
+                        String requestString = MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(requestMap);
+                        KeenLogging.log(String.format("Uploaded events: %s", requestString));
                     }
 
                 } else {
